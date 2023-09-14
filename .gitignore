@@ -46,6 +46,7 @@ build/Release
 
 # Dependency directories
 node_modules/
+h5p-folder/
 
 # Optional npm cache directory
 .npm
