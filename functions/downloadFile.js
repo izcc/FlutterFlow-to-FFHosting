@@ -1,28 +1,42 @@
-const fs = require("fs");
+const https = require('https');
+const fs = require('fs');
 const AdmZip = require('adm-zip');
+const util = require('util');
 const { Buffer } = require('buffer');
 const { CLIENT_RENEG_LIMIT } = require("tls");
+const rename = util.promisify(fs.rename);
 
-// Check if a file path was provided as an argument
-if (process.argv.length < 3) {
-  console.error('Usage: node readFile.js <file-path>');
-  process.exit(1);
-}
+const download = (firebaseDownloadUrl, nameFile) => {
+  return new Promise((resolve, reject) => {
+    const destinationPath = './' + nameFile + '.h5p';
+    console.log('Destination Path:', destinationPath);
+    const fileStream = fs.createWriteStream(destinationPath);
 
-// Get the file path from the command-line argument
-const filePath = process.argv[2];
+    const request = https.get(firebaseDownloadUrl, (response) => {
+      console.log("Inside the get function");
+      response.pipe(fileStream);
+      fileStream.on('finish', () => {
+        fileStream.close();
+        console.log('File downloaded successfully.');
 
-const newFileName = filePath.split(".",1)+".zip";
-console.log(newFileName);
+        const newFileName = destinationPath.replace(/\.h5p$/, ".zip");
+        console.log(newFileName);
 
-fs.rename(filePath, newFileName, (err) => {
-  if (err) {
-    console.log(err);
-  } else {
-    console.log(`El archivo se renombró correctamente a ${newFileName}`);
-    desc(newFileName);
-  }
-});
+        rename(destinationPath, newFileName) // Rename the file to add the .zip extension
+          .then(() => {
+            // Perform any additional operations here, such as unzipping the files and creating the HTML file
+            const link = desc(newFileName);
+            resolve(link); // Resolve the Promise with the link
+          })
+          .catch(reject);
+      });
+    });
+
+    request.on('error', (error) => {
+      reject(error); // Reject the Promise if there's an error with the download
+    });
+  });
+};
 
 const desc = (newFileName) => {
   
@@ -34,14 +48,15 @@ const desc = (newFileName) => {
       archivoZip.extractAllTo(directorioDestino, /*overwrite*/true);
       console.log('Archivo ZIP descomprimido exitosamente');
       newFileName = filePath.split(".",1);
-      htmlgen(newFileName);
+      const result = htmlgen(newFileName);
+      return result;
   } catch (error) {
       console.error(error);
+      return error;
   }
 };
 
 const htmlgen = (newFileName) =>{ 
-  const fs = require('fs');
   
   const folderPath= './h5p-folder/'+newFileName;
 
@@ -87,10 +102,13 @@ const htmlgen = (newFileName) =>{
   </html>
   `;
   
-  fs.writeFile(newFileName+'.html', contenidoHTML, (err) => {
+  const file = fs.writeFile(newFileName+'.html', contenidoHTML, (err) => {
       if (err) throw err;
       console.log('¡El archivo fue creado exitosamente!');
+      const link = 'https://enarmad-318df.web.app/'+newFileName+'.html';
+      return link;
   });
+  return file;
 };
 
 
@@ -127,3 +145,10 @@ const move = (ruta_h5p) => {
     });
   });
 };
+
+
+// Export the downloadFile function to make it accessible from other modules
+module.exports = {
+  download,
+};
+
